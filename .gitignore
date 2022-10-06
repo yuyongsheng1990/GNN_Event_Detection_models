@@ -1,5 +1,6 @@
 *.csv
 .idea
+.gitignore
 data
 jpg
 result
@@ -16,5 +17,4 @@ learn
 test.py
 test.spec
 build
-dist
 *.mp4
