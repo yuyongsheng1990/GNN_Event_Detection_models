@@ -1,41 +1,42 @@
 # -*- coding: utf-8 -*-
-# @Time : 2022/10/31 14:29
+# @Time : 2022/11/29 16:21
 # @Author : yysgz
-# @File : s2_construct graph.py
-# @Project : data_checking.py
+# @File : 1.2_construct_message_graph.py
+# @Project : P3_FinEvent_Model Models
 # @Description :
+
+# construct incremental message graphs
+'''
+This file splits the Twitter dataset into 21 message blocks (please see Section 4.3 of the paper for more details),
+use the message blocks to construct heterogeneous social graphs (please see Figure 1(a) and Section 3.2 of the paper for more details)
+and maps them into homogeneous message graphs (Figure 1(c)).
+Note that:
+# 1) We adopt the Latest Message Strategy (which is the most efficient and gives the strongest performance. See Section 4.4 of the paper for more details) here,
+# as a consequence, each message graph only contains the messages of the date and all previous messages are removed from the graph;
+# To switch to the All Message Strategy or the Relevant Message Strategy, replace 'G = construct_graph_from_df(incr_df)' with 'G = construct_graph_from_df(incr_df, G)' inside construct_incremental_dataset_0922().
+# 2) For test purpose, when calling construct_incremental_dataset_0922(), set test=True, and the message blocks, as well as the resulted message graphs each will contain 100 messages.
+# To use all the messages, set test=False, and the number of messages in the message blocks will follow Table. 4 of the paper.
+'''
 
 import numpy as np
 import pandas as pd
 import datetime
+import time
+
 import networkx as nx
 from scipy import sparse
 
 import torch
 
-import os
-project_path = os.path.abspath(os.path.join(os.getcwd(), '../..'))  # # 获取上级路径
-print(project_path)
-
-'''
-KPGNN:
-    This file splits the Twitter dataset into 21 message blocks (please see Section 4.3 of the paper for more details),
-    use the message blocks to construct heterogeneous social graphs (please see Figure 1(a) and Section 3.2 of the paper for more details)
-    and maps them into homogeneous message graphs (Figure 1(c)).
-    Note that:
-    # 1) We adopt the Latest Message Strategy (which is the most efficient and gives the strongest performance. See Section 4.4 of the paper for more details) here,
-    # as a consequence, each message graph only contains the messages of the date and all previous messages are removed from the graph;
-    # To switch to the All Message Strategy or the Relevant Message Strategy, replace 'G = construct_graph_from_df(incr_df)' with 'G = construct_graph_from_df(incr_df, G)' inside construct_incremental_dataset_0922().
-    # 2) For test purpose, when calling construct_incremental_dataset_0922(), set test=True, and the message blocks, as well as the resulted message graphs each will contain 100 messages.
-    # To use all the messages, set test=False, and the number of messages in the message blocks will follow Table. 4 of the paper.
-'''
-
 import networkx as nx
 from scipy import sparse
-
 from time import time
 import dgl
 
+from P3_FinEvent_Model.S1_gen_dataset import sparse_trans
+
+import os
+project_path = os.path.abspath(os.path.join(os.getcwd(), "../.."))  # # 获取上上级路径
 
 # construct a heterogeneous graph using tweet ids, user_ids, entities and rare(sampled) words(4 modalities模态)
 # if G is not None then insert new nodes to G
@@ -45,7 +46,7 @@ def construct_graph_from_df(df, G=None):
         G = nx.Graph()  # 创建无向图
     for _, row in df.iterrows():  # 返回可迭代元组(index,row)
         # 1st modality: tweet_id
-        tid = 't' + str(row['tweet_id'])
+        tid = 't_' + str(row['tweet_id'])
         G.add_node(tid)  # 一次添加一个节点，字符串作为节点id
         G.nodes[tid]['tweet_id'] = True  # 设置节点属性；right-hand side value is irrelevant for the lookup
 
@@ -57,7 +58,7 @@ def construct_graph_from_df(df, G=None):
         for each in user_ids:
             G.nodes[each]['user_id'] = True
 
-            # 3rd modality: entities
+        # 3rd modality: entities
         entities = row['entities']  # 命名实体识别的实体
         #         words = ['e_' + each for each in entities]
         G.add_nodes_from(entities)
@@ -83,7 +84,7 @@ def construct_graph_from_df(df, G=None):
 # and store the sparse binary adjacency matrix of the homogeneous message graph.
 # DGL(Deep Graph Library)构建更高效的图神经网络
 
-def to_dgl_graph_v3(G, save_path=None):
+def dgl_hetegraph_to_homograph(G, save_path=None):
     message = ''
     print('Start converting heterogeneous networks graph to homogeneous dgl graph.')
     message += 'Start converting heterogeneous networks graph to homogeneous dgl graph.\n'
@@ -117,7 +118,7 @@ def to_dgl_graph_v3(G, save_path=None):
         nx.get_node_attributes(G, 'tweet_id').keys())  # get_node_attributes return node and its attributes;获得tweet_id列表
     userid_nodes = list(nx.get_node_attributes(G, 'user_id').keys())  # 同理，获得user_id列表
     word_nodes = list(nx.get_node_attributes(G, 'word').keys())
-    entity_nodes = list(nx.get_node_attributes(G, 'entity').keys())
+    entity_nodes = list(nx.get_node_attributes(G, 'entities').keys())
     del G  # 删除original 无向图
     mins = (time() - start) / 60
     print('\tDone. Time elapsed: ', mins, ' mins\n')
@@ -183,6 +184,9 @@ def to_dgl_graph_v3(G, save_path=None):
     print('\t\t\tCalculating tweet-user * user-tweet ...')
     message += '\t\t\tCalculating tweet-user * user-tweet ...\n'
     start = time()
+    '''
+    将meta-path: tweet-user-tweet转换成tweet-tweet矩阵，这样才能得到tweet_id0的直接邻居节点tweet_id1,2,3...，不用再隔着user关系。
+    '''
     s_m_tid_userid_tid = s_w_tid_userid * s_w_userid_tid  # 根据user_id生成tweet_id homogeneous message graph
     mins = (time() - start) / 60
     print('\t\t\tDone. Time elapsed: ', mins, ' mins\n')
@@ -312,7 +316,7 @@ def to_dgl_graph_v3(G, save_path=None):
     message += '\t\t\tSaving ...\n'
     start = time()
     if save_path is not None:
-        sparse.save_npz(save_path + "s_m_tid_owrd_tid.npz", s_m_tid_word_tid)
+        sparse.save_npz(save_path + "s_m_tid_word_tid.npz", s_m_tid_word_tid)
         print("Sparse binary word commuting matrix saved.")
         del s_m_tid_word_tid
     del s_w_tid_word
@@ -374,29 +378,23 @@ def to_dgl_graph_v3(G, save_path=None):
     return all_mins, message
 
 
-# Split the Twitter dataset by date into 21 message blocks, use the message blocks to construct heterogeneous social graphs,
-# and maps them into homogeneous message graphs.
-# Note that:
-# 1) We adopt the Latest Message Strategy (which is the most efficient and gives the strongest performance. See Section 4.4 of the paper for more details) here,
-# as a consequence, each message graph only contains the messages of the date and all previous messages are removed from the graph;
 # To switch to the All Message Strategy or the Relevant Message Strategy, replace 'G = construct_graph_from_df(incr_df)' with 'G = construct_graph_from_df(incr_df, G)'.
 # 2) For test purpose, set test=True, and the message blocks, as well as the resulted message graphs each will contain 100 messages.
 # To use all the messages, set test=False, and the number of messages in the message blocks will follow Table. 4 of the paper.
-def construct_incremental_dataset_0922(df, save_path, features, test=True):
+def construct_offline_dataset(df, save_path, features_embeddings, test=True):
     # If test equals true, construct the initial graph using test_ini_size_tweets
     # and increment the graph by test_incr_size tweets each day
     test_ini_size = 500
     test_incr_size = 100
 
     # save data splits for training/validate/test mask generation
-    # data_split = []
+    data_split = []
     # save time spent for the heterogeneous -> homogeneous conversion of each graph
     all_graph_mins = []
     message = ''
     # extract distingct dates
     distinct_dates = df.date.unique()  # 所有unique的date
     print('Number of distinct dates: ', len(distinct_dates))
-    print()
     message += 'Number of distinct dates: '
     message += str(len(distinct_dates))
     message += '\n'
@@ -405,39 +403,52 @@ def construct_incremental_dataset_0922(df, save_path, features, test=True):
     # first week -> initial graph (20254 tweets)
     print('Start constructing initial graph ...')
     message += '\nStart constructing initial graph ...\n'
-    ini_df = df
-    G = construct_graph_from_df(ini_df)
-    path = save_path + '0/'
+    #     ini_df = df.loc[df['date'].isin(distinct_dates[:7])]  # find top 7 days
+    #     if test:
+    #         ini_df = ini_df[: test_ini_size]  # top test_ini_size dates
+    G = construct_graph_from_df(df)
+    path = save_path
     if path is None:
         os.mkdir(path)  # 创建目录
-    graph_mins, graph_message = to_dgl_graph_v3(G,
-                                                save_path=path)  # convert a heterogeneous social graph to a homogeneous message graph
+    graph_mins, graph_message = dgl_hetegraph_to_homograph(G,
+                                                           save_path=path)  # convert a heterogeneous social graph to a homogeneous message graph
     message += graph_message
     print('Initial graph saved')
     message += 'Initial graph saved\n'
     # record the totoal number of tweets
     all_graph_mins.append(graph_mins)
     # extract and save the labels of corresponding tweets
-    y = ini_df['event_id'].values
-    y = [int(each) for each in y]
-    np.save(path + 'labels.npy', np.asarray(y))  # ndarray对象，实际只创建一个指针
+    labels = [int(each) for each in df['event_id'].values]
+    np.save(path + 'labels.npy', np.asarray(labels))  # ndarray对象，实际只创建一个指针
     print('Labels saved.')
     message += 'Labels saved.\n'
     # extract and save the features of corresponding tweets
-    indices = ini_df['index'].values.tolist()
-    x = features[indices, :]
-    np.save(path + 'features.npy', x)
+    indices = df['index'].values.tolist()
+    x = features_embeddings[indices, :]  # features是指combined_features: document_embeddings + time_features
+    np.save(path + 'features_embeddings.npy', x)
     print('Features saved.')
     message += 'Features saved. \n\n'
 
+    #     # subsequent days -> insert tweets day by day(skip the last day because it only contains on tweet)
+    #     for i in range(7, len(distinct_dates) -1):
+    #         print('Start constructing graph', str(i - 6), '...')
+    #         message += '\nStart constructing graph'
+    #         message += str(i-6)
+    #         message += '...\n'
+    #         incr_df = df.loc[df['date']==distinct_dates[i]]
+    #         if test:
+
     return message, all_graph_mins
+
+
+# run-offline dataset: 4days
+import datetime
 
 load_path = project_path + '/data/FinEvent_datasets/raw dataset/'
 save_path = project_path + '/result/FinEvent result/'
-
-save_path = project_path + '/result/FinEvent result/incremental_test/'
-if not os.path.exists(save_path):
-    os.mkdir(save_path)
+offline_save_path = project_path + '/result/FinEvent result/offline dataset/'
+if not os.path.exists(offline_save_path):
+    os.mkdir(offline_save_path)
 
 # load data (68841 tweets, multiclasses filtered)
 p_part1 = load_path + '68841_tweets_multiclasses_filtered_0722_part1.npy'
@@ -456,15 +467,40 @@ print('Data converted to dataframe.')
 df = df.sort_values(by='created_at').reset_index(drop=True)
 # append date
 df['date'] = [d.date() for d in df['created_at']]
-# 因为graph太大，爆了内存，所以取4天的twitter data
+# 因为graph太大，爆了内存，所以取4天的twitter data做demo，后面用nci server
 init_day = df.loc[0, 'date']
-df = df[(df['date']>= init_day) & (df['date']<= init_day + datetime.timedelta(days=3))]
+df = df[(df['date']>= init_day) & (df['date']<= init_day + datetime.timedelta(days=3))].reset_index()
 # load features
-# the dimension of feature is 300 in this dataset
-f = np.load(project_path + '/result/FinEvent result/features_69612_0709_spacy_lg_zero_multiclasses_filtered.npy')
+# the dimension of combined_feature is 302 in this dataset: document_features-300 + time_features-2
+f = np.load(project_path + '/result/FinEvent result/combined_features.npy')
 # generate test graphs, features, and labels
-message, all_graph_mins = construct_incremental_dataset_0922(df, save_path, f, True)
-with open(save_path + 'node_edge_statistics.txt', 'w') as text_file:
+message, all_graph_mins = construct_offline_dataset(df, offline_save_path, f, True)
+with open(offline_save_path + 'node_edge_statistics.txt', 'w') as text_file:
     text_file.write(message)
-np.save(save_path + 'all_graph_min.npy', np.asarray(all_graph_mins))
+np.save(offline_save_path + 'all_graph_min.npy', np.asarray(all_graph_mins))
 print('Time spent on heterogeneous -> homogeneous graph conversions: ', all_graph_mins)
+
+# data_split: 4 days
+# data_split保存的是message_block的数据量。e.g. data_split = [  500  ,   100, ...,  100]
+#                                                         block_0  block_1    block_n
+# demo: data_split
+import math
+dividing_point = int(df.shape[0] / 6)
+data_amount = 0
+
+data_split = []
+for i in range(5):
+    data_amount += dividing_point
+    if i < 2:
+        continue
+    else:
+        data_split.append(data_amount)
+data_split.append(df.shape[0])
+# save data_split.npy
+np.save(save_path + '/offline dataset/data_split.npy', np.array(data_split))
+# save edge_index_[entity, userid, word].pt 文件
+data_path_temp = project_path + '/result/FinEvent result/offline dataset/'
+relations = ['entity', 'userid', 'word']
+for relation in relations:
+    relation_edge_index = sparse_trans(os.path.join(data_path_temp, 's_m_tid_%s_tid.npz' % relation))
+    torch.save(relation_edge_index, data_path_temp + '/edge_index_%s.pt' % relation)

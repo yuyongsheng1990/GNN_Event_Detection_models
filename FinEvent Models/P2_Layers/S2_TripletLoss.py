@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# @Time : 2022/11/2 15:01
+# @Time : 2022/11/29 16:54
 # @Author : yysgz
-# @File : TirpletLoss.py
-# @Project : data_checking.py
+# @File : S2_TripletLoss.py
+# @Project : P3_FinEvent_Model Models
 # @Description :
 
 from itertools import combinations
@@ -46,6 +46,7 @@ class Discriminator(nn.Module):  # 鉴别器
         return logits
 
 
+# 计算triplet_loss损失函数
 class OnlineTripletLoss(nn.Module):
     '''
     Online Triplets loss
@@ -56,22 +57,18 @@ class OnlineTripletLoss(nn.Module):
     def __init__(self, margin, triplet_selector):
         super(OnlineTripletLoss, self).__init__()
         self.margin = margin
-        self.triplet_selector = triplet_selector
+        self.triplet_selector = triplet_selector  # selector选择器对象，含有get_triplets方法
 
     def forward(self, embeddings, target):
-        triplets = self.triplet_selector.get_triplets(embeddings, target)
+        triplets = self.triplet_selector.get_triplets(embeddings, target)  # 根据embeddings和labels返回最大loss index list
         # if embeddings.is_cuda():
         #     triplets = triplets.cuda()
-        ap_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 1]]).pow(2).sum(1)  # .pow(.5)
+        # embeddings矩阵索引是单个元素，取行向量，多个行向量又组成矩阵！！
+        ap_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 1]]).pow(2).sum(1)  # .pow(.5);
         an_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 2]]).pow(2).sum(1)  # .pow(.5)
         losses = F.relu(ap_distances - an_distances + self.margin)
 
         return losses.mean(), len(triplets)
-
-# 矩阵计算
-def distance_matrix_computation(vectors):
-    distance_matrix=-2*vectors.mm(torch.t(vectors))+vectors.pow(2).sum(dim=1).view(1,-1)+vectors.pow(2).sum(dim=1).view(1,-1)
-    return distance_matrix
 
 class TripletSelector:
     '''
@@ -83,6 +80,13 @@ class TripletSelector:
     def get_triplets(self, embeddings, labels):
         raise NotImplementedError  # 如果这个方法没有被子类重写，但是调用了，就会报错。
 
+# 矩阵计算
+def distance_matrix_computation(vectors):
+    distance_matrix=-2*vectors.mm(torch.t(vectors))+vectors.pow(2).sum(dim=1).view(1,-1)+vectors.pow(2).sum(dim=1).view(-1,1)
+    return distance_matrix
+
+
+# 具体实现三元损失函数triplets_loss，返回某标签下ith元素和jth元素，其最大loss对应的其他标签元素索引
 
 class FunctionNegativeTripletSelector(TripletSelector):
     '''
@@ -96,7 +100,7 @@ class FunctionNegativeTripletSelector(TripletSelector):
         super(FunctionNegativeTripletSelector, self).__init__()
         self.cpu = cpu
         self.margin = margin
-        self.negative_selection_fn = negative_selection_fn
+        self.negative_selection_fn = negative_selection_fn  # 返回loss_values最大元素值的index的selector
 
     def get_triplets(self, embeddings, labels):
         if self.cpu:
@@ -107,23 +111,32 @@ class FunctionNegativeTripletSelector(TripletSelector):
         labels = labels.cpu().data.numpy()
         triplets = []
 
+        # embedding计算的distance matrix与labels计算loss，取最大loss_index
+        # 对于每个标签label
         for label in set(labels):
-            label_mask = (labels == label)
-            label_indices = np.where(label_mask)[0]
+            label_mask = (labels == label)  # numpy array([True, False, True, True])
+            label_indices = np.where(label_mask)[0]  # 标签索引, label_index, array([0, 2, 3], dtype=int64)
             if len(label_indices) < 2:
                 continue
-            negative_indices = np.where(np.logical_not(label_mask))[0]
-            anchor_positives = list(combinations(label_indices, 2))  # all anchor-positive pairs
-            anchor_positives = np.array(anchor_positives)
+            negative_indices = np.where(np.logical_not(label_mask))[
+                0]  # 其他标签索引, not_label_index, array([1], dtype=int64)
+            anchor_pos_list = list(combinations(label_indices, 2))  # 2个元素的标签索引组合, [(0, 2), (0, 3), (2, 3)]
+            anchor_pos_list = np.array(anchor_pos_list)  # 转换成np.array才能进行slice切片操作
 
-            ap_distances = distance_matrix[anchor_positives[:, 0], anchor_positives[:, 1]]
-            for anchor_positive, ap_distance in zip(anchor_positives, ap_distances):
+            # 按照anchor_positive index从距离矩阵中抽取distance；0-index，array([0, 0, 2]);
+            # 提取标签label的i-element与j-element距离。
+            anchor_p_distances = distance_matrix[
+                anchor_pos_list[:, 0], anchor_pos_list[:, 1]]  # 类似组成坐标，tensor([-1.1761,-0.8381,0.0099])
+            for anchor_positive, ap_distance in zip(anchor_pos_list, anchor_p_distances):  # 每个标签下，元素组合、元素距离
+                # 0表示ith元素到各个其他标签元素的距离。
+                # 同一标签下(ith,jth)距离 - ith元素到其他标签元素的距离 + self.margin边际收益
                 loss_values = ap_distance - distance_matrix[
                     torch.LongTensor(np.array([anchor_positive[0]])), torch.LongTensor(negative_indices)] + self.margin
                 loss_values = loss_values.data.cpu().numpy()
-                hard_negative = self.negative_selection_fn(loss_values)
-                if hard_negative is not None:
-                    hard_negative = negative_indices[hard_negative]
+                hard_neg_max_index = self.negative_selection_fn(loss_values)  # hard返回最大loss的索引
+                if hard_neg_max_index is not None:  # if 最大loss值非空，则返回其他标签元素的索引
+                    hard_negative = negative_indices[hard_neg_max_index]
+                    # 对于谋标签下ith元素和jth元素，其最大loss对应的其他标签元素索引
                     triplets.append([anchor_positive[0], anchor_positive[1], hard_negative])
 
         if len(triplets) == 0:
@@ -134,7 +147,7 @@ class FunctionNegativeTripletSelector(TripletSelector):
 
 # 随机-loss随机负值
 def random_hard_negative(loss_values):
-    hard_negatives = np.where(loss > 0)[0]
+    hard_negatives = np.where(loss_values > 0)[0]
     return np.random.choice(hard_negatives) if len(hard_negatives) > 0 else None
 
 # 硬-loss最大负值
@@ -142,10 +155,10 @@ def hardest_negative(loss_values):
     hard_negative = np.argmax(loss_values)
     return hard_negative if loss_values[hard_negative] > 0 else None
 
-# 硬负值三元组选择器
+# 硬三元损失函数
 def HardestNegativeTripletSelector(margin, cpu=False):
     return FunctionNegativeTripletSelector(margin=margin, negative_selection_fn=hardest_negative, cpu=cpu)
 
-# 随机负值三元组选择器
+# 随机三元损失函数
 def RandomNegativeTripletSelector(margin, cpu=False):
     return FunctionNegativeTripletSelector(margin=margin, negative_selection_fn=random_hard_negative, cpu=cpu)

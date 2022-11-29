@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
-# @Time : 2022/11/2 14:59
+# @Time : 2022/11/29 16:58
 # @Author : yysgz
-# @File : MarGNN Model.py
-# @Project : FinEvent Model
+# @File : S4_MarGNN_model.py
+# @Project : P3_FinEvent_Model Models
 # @Description :
 
 import torch
 import torch.nn as nn
 from torch.functional import Tensor
 import time
+from P2_Layers.S1_GAT_Model import Inter_AGG, Intra_AGG
 
-
+# MarGNN model 返回node embedding representation
 class MarGNN(nn.Module):
     def __init__(self, GNN_args, num_relations, inter_opt, is_shared=False):
         super(MarGNN, self).__init__()
@@ -26,6 +27,7 @@ class MarGNN(nn.Module):
         if self.inter_opt == 'cat_w_avg_mlp' or 'cat_wo_avg_mlp':
             in_dim, hid_dim, out_dim, heads = GNN_args
             mlp_args = self.num_relations * out_dim, out_dim
+            self.inter_agg = Inter_AGG(mlp_args)
         else:
             self.inter_agg = Inter_AGG()
 

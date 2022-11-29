@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# @Time : 2022/11/2 15:07
+# @Time : 2022/11/29 16:55
 # @Author : yysgz
-# @File : neighborRL.py
-# @Project : data_checking.py
+# @File : S3_NeighborRL.py
+# @Project : P3_FinEvent_Model Models
 # @Description :
 
 from typing import Any, Dict
@@ -12,10 +12,10 @@ from torch.functional import Tensor
 import math
 import os
 
-def pre_node_dist(multi_r_data, features, save_path=None):
+def cal_similarity_node_edge(multi_r_data, features, save_path=None):
     '''
-    This is used to culculate the similarity between node and
-    its neighbors in advance in order to avoid the repetitive computation.
+    This is used to culculate the similarity between node and its neighbors in advance
+    in order to avoid the repetitive computation.
     Args:
         multi_r_data ([type]): [description]
         features ([type]): [description]
@@ -46,10 +46,12 @@ def pre_node_dist(multi_r_data, features, save_path=None):
                                 'num_neighbors': num_neighbors}
         relation_config['relation_%d' % relation_id] = node_config
     if save_path is not None:
+        print(save_path)
         save_path = os.path.join(save_path, 'relation_config.npy')
         np.save(save_path, relation_config)
 
 
+# 返回filtered neighbor index
 def RL_neighbor_filter(multi_r_data, RL_thtesholds, load_path):
     load_path = os.path.join(load_path, 'relation_config.npy')
     relation_config = np.load(load_path, allow_pickle=True)
@@ -67,7 +69,7 @@ def RL_neighbor_filter(multi_r_data, RL_thtesholds, load_path):
             neighbors_idx = relation_config[relations[i]][node]['neighbors_idx']
             num_neighbors = relation_config[relations[i]][node]['num_neighbors']
             sorted_neighbors = relation_config[relations[i]][node]['sorted_neighbors']
-            sorted_index = relation_config[relation[i]][node]['sorted_index']
+            sorted_index = relation_config[relations[i]][node]['sorted_index']
 
             if num_neighbors < 5:
                 remain_node_index = torch.cat((remain_node_index, neighbors_idx))
@@ -75,9 +77,11 @@ def RL_neighbor_filter(multi_r_data, RL_thtesholds, load_path):
 
             threshold = float(RL_thtesholds[i])
 
+            num_kept_neighbors = math.ceil(num_neighbors * threshold) + 1
             num_kept_neighbors_idx = neighbors_idx[sorted_index[:num_kept_neighbors]]
             filtered_neighbors_idx = neighbors_idx[sorted_index[:num_kept_neighbors]]
             remain_node_index = torch.cat((remain_node_index, filtered_neighbors_idx))
+
         remain_node_index = remain_node_index.type('torch.LongTensor')
         edge_index = edge_index[:, remain_node_index]
         multi_remain_data.append(edge_index)
