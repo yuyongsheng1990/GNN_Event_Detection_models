@@ -9,7 +9,7 @@ step 1. run utils/generate_initial_features.py to generate the initial features 
 
 step 2. run utils/custom_message_graph.py to construct incremental message graphs. To construct small message graphs for test purpose, set test=True when calling construct_incremental_dataset_0922(). To use all the messages (see Appendix of the paper for a statistic of the number of messages in the graphs), set test=False.
 
-step 3. run utils/save_edge_index.py in advance to acclerate the training process.
+step 3. run utils/S3_save_edge_index.py in advance to acclerate the training process.
 
 step 4. run offline.py
 '''
@@ -55,13 +55,13 @@ def args_register():
     parser.add_argument('--sampler', default='RL_sampler')
     parser.add_argument('--cluster_type', default='kmeans', help='Types of clustering algorithms')  # DBSCAN
 
-    # RL-0
+    # RL-0，第一个强化学习是learn the optimal neighbor weights
     parser.add_argument('--threshold_start0', default=[[0.2], [0.2], [0.2]], type=float,
                         help='The initial value of the filter threshold for state1 or state3')
     parser.add_argument('--RL_step0', default=0.02, type=float, help='The starting epoch of RL for state1 or state3')
     parser.add_argument('--RL_start0', default=0, type=int, help='The starting epoch of RL for state1 or state3')
 
-    # RL-1
+    # RL-1，第二个强化学习是learn the optimal DBSCAN params.
     parser.add_argument('--eps_start', default=0.001, type=float, help='The initial value of the eps for state2')
     parser.add_argument('--eps_step', default=0.02, type=float, help='The step size of eps for state2')
     parser.add_argument('--min_Pts_start', default=2, type=int, help='The initial value of the min_Pts for state2')
@@ -69,7 +69,8 @@ def args_register():
 
     # other arguments
     parser.add_argument('--use_cuda', dest='use_cuda', default=True, action='store_true', help='Use cuda')
-    parser.add_argument('--data_path', default=project_path + '/result/FinEvent result/offline dataset/', type=str,
+    parser.add_argument('--data_path', default=project_path + '/result/FinEvent result/offline dataset/', type=str, help='graph data path')
+    parser.add_argument('--result_path', default=project_path + '/result/FinEvent result/offline result', type=str,
                         help='Path of features, labels and edges')
     # format: './incremental_0808/incremental_graphs_0808/embeddings_XXXX'
     parser.add_argument('--mask_path', default=None, type=str,

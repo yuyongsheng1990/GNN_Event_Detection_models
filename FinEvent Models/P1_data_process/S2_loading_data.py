@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2022/11/29 16:14
 # @Author : yysgz
-# @File : 1.1_load_data.py
+# @File : S2_loading_data.py
 # @Project : P3_FinEvent_Model Models
 # @Description :
 # generate the initial features for the messages
@@ -24,7 +24,7 @@ import networkx as nx
 from scipy import sparse
 
 import torch
-
+from P1_data_process.S1_construct_message_graph_functions import construct_offline_dataset
 import os
 project_path = os.path.abspath(os.path.join(os.getcwd(), "../.."))  # # 获取上上级路径
 import en_core_web_lg  # spacy提供的预训练语言模型，将文本标记化已生成doc对象
@@ -44,17 +44,17 @@ df = pd.DataFrame(data=df, columns=['event_id','tweet_id','text','user_id','crea
                                       'place_full_name','place_country_code','hashtags','user_mentions','image_urls',
                                       'entities','words','filtered_words','sampled_words'])
 print('Data converted to dataframe.')
+
 # sort date by time
 df = df.sort_values(by='created_at').reset_index(drop=True)
-
+# append date
 df['date'] = [d.date() for d in df['created_at']]
 # 因为graph太大，爆了内存，所以取4天的twitter data做demo，后面用nci server
 init_day = df.loc[0, 'date']
-df_4days = df[(df['date']>= init_day) & (df['date']<= init_day + datetime.timedelta(days=3))].reset_index()
-
-print(df_4days.shape)
-print(df_4days.event_id.nunique())
-print(df_4days.user_id.nunique())
+df = df[(df['date']>= init_day) & (df['date']<= init_day + datetime.timedelta(days=3))].reset_index()  # (11971, 18)
+print(df.shape)
+print(df.event_id.nunique())
+print(df.user_id.nunique())
 
 # calculate the embeddings of all the documents in the dataframe
 # the embeddings of each document is an average of the pre-trained embeddings of all the words in it
@@ -77,11 +77,11 @@ def df_to_t_features(df):
     return t_features
 
 # 生成文档embedding
-d_features = documents_to_features(df_4days)
+d_features = documents_to_features(df)
 print('Document features generated')
 
 # 生成时间特征days和seconds
-t_features = df_to_t_features(df_4days)
+t_features = df_to_t_features(df)
 print('Time features generated.')
 
 combined_features = np.concatenate((d_features, t_features), axis=1)
@@ -90,6 +90,16 @@ print('Concatenated document features and time features.')
 np.save(save_path + 'combined_features.npy', combined_features)
 print('Initial features saved.')
 
-combined_features = np.load(save_path + 'combined_features.npy')
-print('Initial features loaded.')
-print(combined_features.shape)
+# -----------------------------------------------------------------------------
+# load combined features
+# the dimension of combined_feature is 302 in this dataset: document_features-300 + time_features-2
+f = np.load(project_path + '/result/FinEvent result/combined_features.npy')  # (11971, 302)
+
+# generate test graphs, features, and labels
+offline_save_path = project_path + '/result/FinEvent result/offline dataset/'
+
+message, all_graph_mins = construct_offline_dataset(df, offline_save_path, f, True)
+with open(offline_save_path + 'node_edge_statistics.txt', 'w') as text_file:
+    text_file.write(message)
+np.save(offline_save_path + 'all_graph_min.npy', np.asarray(all_graph_mins))
+print('Time spent on heterogeneous -> homogeneous graph conversions: ', all_graph_mins)

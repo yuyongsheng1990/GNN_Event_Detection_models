@@ -22,7 +22,7 @@ from define_parameters import args_register
 from P2_Layers.S2_TripletLoss import OnlineTripletLoss, HardestNegativeTripletSelector, RandomNegativeTripletSelector
 from P3_FinEvent_Model.S2_FinEvent_model import FinEvent
 from P3_FinEvent_Model.S4_Evaluation import AverageNonzeroTripletsMetric
-from offline_FinEvent_model import offline_FinEvent_model
+from P4_Run_FinEvent_Offline.offline_FinEvent_model import offline_FinEvent_model
 args = args_register()
 args.data_path + '/embeddings_' + strftime('%m%d%H%M%S', localtime())
 
@@ -34,8 +34,10 @@ if __name__ == '__main__':
     print('Using CUDA:', torch.cuda.is_available())
 
     # create working path
-    embedding_save_path = args.data_path + '/offline_embeddings'
-    if embedding_save_path is None:
+    if not os.path.exists(args.result_path):
+        os.mkdir(args.data_path)
+    embedding_save_path = args.result_path + '/offline_embeddings'
+    if not os.path.exists(embedding_save_path):
         os.mkdir(embedding_save_path)
     print('embedding save path: ', embedding_save_path)
 
@@ -72,3 +74,4 @@ if __name__ == '__main__':
                                                   embedding_save_path=embedding_save_path,
                                                   loss_fn=loss_fn,
                                                   model=None)
+    print('model finished')

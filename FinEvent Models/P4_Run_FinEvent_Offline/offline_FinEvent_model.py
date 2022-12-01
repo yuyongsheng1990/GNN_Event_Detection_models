@@ -22,7 +22,8 @@ from P2_Layers.S4_MarGNN_model import MarGNN
 from P3_FinEvent_Model.S1_gen_dataset import create_offline_homodataset, create_multi_relational_graph, MySampler, save_embeddings
 from P3_FinEvent_Model.S4_Evaluation import evaluate
 
-def offline_FinEvent_model(train_i, i,
+def offline_FinEvent_model(train_i,
+                           i,
                            args,
                            metrics,
                            embedding_save_path,
@@ -37,7 +38,7 @@ def offline_FinEvent_model(train_i, i,
 
     # step2: load data
     relation_ids: List[str] = ['entity', 'userid', 'word']
-    homo_data = create_offline_homodataset(args.data_path, [train_i, i])
+    homo_data = create_offline_homodataset(args.data_path, args.result_path, [train_i, i])
     multi_r_data = create_multi_relational_graph(args.data_path, relation_ids, [train_i, i])
     num_relations = len(multi_r_data)
 
