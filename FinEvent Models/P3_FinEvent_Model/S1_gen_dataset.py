@@ -91,11 +91,11 @@ def create_homodataset(loadpath, mode, valid_percent=0.2):
     return data
 
 
-def create_offline_homodataset(loadpath, mode):
-    features = np.load(os.path.join(loadpath, 'features_embeddings.npy'))
+def create_offline_homodataset(loadpath, savepath, mode):
+    features = np.load(os.path.join(loadpath, 'index_sorted_combined_features_embeddings.npy'))
     features = torch.FloatTensor(features)
     print('features loaded')
-    labels = np.load(os.path.join(loadpath, 'labels.npy'))
+    labels = np.load(os.path.join(loadpath, 'index_sorted_labels.npy'))
     print('labels loaded')
     labels = torch.LongTensor(labels)
     data = Data(x=features, edge_index=None, y=labels)

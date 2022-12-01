@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2022/11/29 16:21
 # @Author : yysgz
-# @File : 1.2_construct_message_graph.py
+# @File : S1_construct_message_graph_functions.py
 # @Project : P3_FinEvent_Model Models
 # @Description :
 
@@ -381,7 +381,7 @@ def dgl_hetegraph_to_homograph(G, save_path=None):
 # To switch to the All Message Strategy or the Relevant Message Strategy, replace 'G = construct_graph_from_df(incr_df)' with 'G = construct_graph_from_df(incr_df, G)'.
 # 2) For test purpose, set test=True, and the message blocks, as well as the resulted message graphs each will contain 100 messages.
 # To use all the messages, set test=False, and the number of messages in the message blocks will follow Table. 4 of the paper.
-def construct_offline_dataset(df, save_path, features_embeddings, test=True):
+def construct_offline_dataset(df, save_path, combined_features, test=True):
     # If test equals true, construct the initial graph using test_ini_size_tweets
     # and increment the graph by test_incr_size tweets each day
     test_ini_size = 500
@@ -419,12 +419,12 @@ def construct_offline_dataset(df, save_path, features_embeddings, test=True):
     all_graph_mins.append(graph_mins)
     # extract and save the labels of corresponding tweets
     labels = [int(each) for each in df['event_id'].values]
-    np.save(path + 'labels.npy', np.asarray(labels))  # ndarray对象，实际只创建一个指针
+    np.save(path + 'labels.npy', np.asarray(labels))  # ndarray数组，实际只创建一个指针
     print('Labels saved.')
     message += 'Labels saved.\n'
     # extract and save the features of corresponding tweets
     indices = df['index'].values.tolist()
-    x = features_embeddings[indices, :]  # features是指combined_features: document_embeddings + time_features
+    x = combined_features[indices, :]  # features是指combined_features: document_embeddings + time_features
     np.save(path + 'features_embeddings.npy', x)
     print('Features saved.')
     message += 'Features saved. \n\n'
@@ -439,68 +439,3 @@ def construct_offline_dataset(df, save_path, features_embeddings, test=True):
     #         if test:
 
     return message, all_graph_mins
-
-
-# run-offline dataset: 4days
-import datetime
-
-load_path = project_path + '/data/FinEvent_datasets/raw dataset/'
-save_path = project_path + '/result/FinEvent result/'
-offline_save_path = project_path + '/result/FinEvent result/offline dataset/'
-if not os.path.exists(offline_save_path):
-    os.mkdir(offline_save_path)
-
-# load data (68841 tweets, multiclasses filtered)
-p_part1 = load_path + '68841_tweets_multiclasses_filtered_0722_part1.npy'
-p_part2 = load_path + '68841_tweets_multiclasses_filtered_0722_part2.npy'
-# allow_pickle: 可选，布尔值，允许使用 Python pickles 保存对象数组，Python 中的 pickle 用于在保存到磁盘文件或从磁盘文件读取之前，对对象进行序列化和反序列化。
-df_np_part1 = np.load(p_part1, allow_pickle=True)
-df_np_part2 = np.load(p_part2, allow_pickle=True)
-df_np = np.concatenate((df_np_part1, df_np_part2), axis=0)
-print('Data loaded.')
-df = pd.DataFrame(data=df_np, columns=['event_id', 'tweet_id', 'text', 'user_id', 'created_at', 'user_loc',
-                                      'place_type', 'place_full_name', 'place_country_code', 'hashtags',
-                                      'user_mentions', 'image_urls', 'entities', 'words', 'filtered_words', 'sampled_words'])
-print('Data converted to dataframe.')
-
-# sort date by time
-df = df.sort_values(by='created_at').reset_index(drop=True)
-# append date
-df['date'] = [d.date() for d in df['created_at']]
-# 因为graph太大，爆了内存，所以取4天的twitter data做demo，后面用nci server
-init_day = df.loc[0, 'date']
-df = df[(df['date']>= init_day) & (df['date']<= init_day + datetime.timedelta(days=3))].reset_index()
-# load features
-# the dimension of combined_feature is 302 in this dataset: document_features-300 + time_features-2
-f = np.load(project_path + '/result/FinEvent result/combined_features.npy')
-# generate test graphs, features, and labels
-message, all_graph_mins = construct_offline_dataset(df, offline_save_path, f, True)
-with open(offline_save_path + 'node_edge_statistics.txt', 'w') as text_file:
-    text_file.write(message)
-np.save(offline_save_path + 'all_graph_min.npy', np.asarray(all_graph_mins))
-print('Time spent on heterogeneous -> homogeneous graph conversions: ', all_graph_mins)
-
-# data_split: 4 days
-# data_split保存的是message_block的数据量。e.g. data_split = [  500  ,   100, ...,  100]
-#                                                         block_0  block_1    block_n
-# demo: data_split
-import math
-dividing_point = int(df.shape[0] / 6)
-data_amount = 0
-
-data_split = []
-for i in range(5):
-    data_amount += dividing_point
-    if i < 2:
-        continue
-    else:
-        data_split.append(data_amount)
-data_split.append(df.shape[0])
-# save data_split.npy
-np.save(save_path + '/offline dataset/data_split.npy', np.array(data_split))
-# save edge_index_[entity, userid, word].pt 文件
-data_path_temp = project_path + '/result/FinEvent result/offline dataset/'
-relations = ['entity', 'userid', 'word']
-for relation in relations:
-    relation_edge_index = sparse_trans(os.path.join(data_path_temp, 's_m_tid_%s_tid.npz' % relation))
-    torch.save(relation_edge_index, data_path_temp + '/edge_index_%s.pt' % relation)

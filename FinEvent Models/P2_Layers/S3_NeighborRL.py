@@ -47,7 +47,7 @@ def cal_similarity_node_edge(multi_r_data, features, save_path=None):
         relation_config['relation_%d' % relation_id] = node_config
     if save_path is not None:
         print(save_path)
-        save_path = os.path.join(save_path, 'relation_config.npy')
+        save_path = os.path.join(save_path, 'relation_top_p_neighbors.npy')
         np.save(save_path, relation_config)
 
 
@@ -78,7 +78,6 @@ def RL_neighbor_filter(multi_r_data, RL_thtesholds, load_path):
             threshold = float(RL_thtesholds[i])
 
             num_kept_neighbors = math.ceil(num_neighbors * threshold) + 1
-            num_kept_neighbors_idx = neighbors_idx[sorted_index[:num_kept_neighbors]]
             filtered_neighbors_idx = neighbors_idx[sorted_index[:num_kept_neighbors]]
             remain_node_index = torch.cat((remain_node_index, filtered_neighbors_idx))
 
