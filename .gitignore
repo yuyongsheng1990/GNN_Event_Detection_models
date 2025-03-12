@@ -19,3 +19,11 @@ test.spec
 build
 *.mp4
 Raw*
+# 忽略任何层级下的 data、save、result 文件夹及其内容
+**/*data*/
+**/*save*/
+**/*result*/
+# 忽略任何层级下的文件名包含 data、save、result 的文件
+**/*data*
+**/*save*
+**/*result*
