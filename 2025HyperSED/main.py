@@ -27,15 +27,15 @@ def get_params():
     parser.add_argument('--devices', type=bool, default=True)
     parser.add_argument("--algorithm", type=str, default="HyperSED")
     parser.add_argument('--mode', type=str, default="open_set")
-    parser.add_argument('--data_path', type=str, default=project_path + '/data_preprocess')
-    parser.add_argument('--save_model_path', type=str, default='./saved_models')
+    parser.add_argument('--data_path', type=str, default=project_path + '/data')
+    parser.add_argument('--save_model_path', type=str, default='./results/saved_models')
     parser.add_argument('--n_cluster_trials', type=int, default=5)
-    parser.add_argument('--dataset_name', type=str, default='Event2012', choices=['Event2012', 'Event2018'])
+    parser.add_argument('--dataset_name', type=str, default='CrisisLex', choices=['Event2012', 'Event2018', 'CrisisLex', 'Kawarith'])
     parser.add_argument('--encode', type=str, default='SBERT', choices=['SBERT', 'BERT'])
     parser.add_argument('--edge_type', type=str, default='e_as', choices=['e_as', 'e_a', 'e_s'])
     parser.add_argument('--gpu', type=int, default=3, help='gpu')
     parser.add_argument('--num_epochs', type=int, default=200)
-    parser.add_argument('--patience', type=int, default=100)
+    parser.add_argument('--patience', type=int, default=20)
     parser.add_argument('--hgae', type=bool, default=True)
     parser.add_argument('--dsi', type=bool, default=True)
     parser.add_argument('--pre_anchor', type=bool, default=True)
@@ -87,7 +87,7 @@ def main(args):
 
     else:
         if args.dataset_name == 'Event2012':
-            blocks = [20]
+            blocks = [0]
             # blocks = [i+1 for i in range(21)]
             for block in blocks:
                 # try:
@@ -98,7 +98,8 @@ def main(args):
                 # except:
                 #     continue
         else:
-            blocks = [i+1 for i in range(16)]
+            # blocks = [i+1 for i in range(16)]
+            blocks = [0]
             for block in blocks:
                 try:
                     trainer = Trainer(args, block)
@@ -110,8 +111,8 @@ def main(args):
 
     # saving args and results
     time = datetime.now().strftime('%m%d%H%M%S')
-    save_path = f"./para_results/{args.dataset_name}/{args.mode}"
-    time_save_path = f"./running_times/{args.dataset_name}/{args.mode}"
+    save_path = f"./results/para_results/{args.dataset_name}/{args.mode}"
+    time_save_path = f"./results/running_times/{args.dataset_name}/{args.mode}"
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     if not os.path.exists(time_save_path):
@@ -123,9 +124,9 @@ def main(args):
             'args':args_dict}
     data_json = json.dumps(data, indent=4)
     times_json = json.dumps(times_list, indent=4)
-    with open(f"{save_path}/{time}_{args.algorithm_name}.json", "w") as json_file:
+    with open(f"{save_path}/{args.algorithm_name}.json", "w") as json_file:
         json_file.write(data_json)
-    with open(f"{time_save_path}/{time}_{args.algorithm_name}.json", "w") as json_file:
+    with open(f"{time_save_path}/{args.algorithm_name}.json", "w") as json_file:
         json_file.write(times_json)
 
     torch.cuda.empty_cache()

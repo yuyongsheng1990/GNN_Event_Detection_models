@@ -23,7 +23,5 @@ Raw*
 **/*data*/
 **/*save*/
 **/*result*/
-# 忽略任何层级下的文件名包含 data、save、result 的文件
-**/*data*
-**/*save*
-**/*result*
+# 忽略任何层级下的文件名包含__pycache__ 的文件
+**/**__pycache__
